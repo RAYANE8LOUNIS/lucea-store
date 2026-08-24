@@ -11,7 +11,9 @@ from sqlalchemy import Boolean, DateTime, Numeric, String, Text, create_engine, 
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
 DATABASE_URL=os.getenv("DATABASE_URL")
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"): DATABASE_URL=DATABASE_URL.replace("postgres://","postgresql+psycopg://",1)
+if DATABASE_URL:
+ if DATABASE_URL.startswith("postgres://"): DATABASE_URL=DATABASE_URL.replace("postgres://","postgresql+psycopg://",1)
+ elif DATABASE_URL.startswith("postgresql://"): DATABASE_URL=DATABASE_URL.replace("postgresql://","postgresql+psycopg://",1)
 engine=create_engine(DATABASE_URL or "sqlite:///./lucea.db", pool_pre_ping=True)
 class Base(DeclarativeBase): pass
 class ProductDB(Base):
