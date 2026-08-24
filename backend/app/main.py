@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 app = FastAPI(title="Lucea API")
-app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "https://lucea-store.vercel.app"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 WILAYAS = ["أدرار","الشلف","الأغواط","أم البواقي","باتنة","بجاية","بسكرة","بشار","البليدة","البويرة","تمنراست","تبسة","تلمسان","تيارت","تيزي وزو","الجزائر","الجلفة","جيجل","سطيف","سعيدة","سكيكدة","سيدي بلعباس","عنابة","قالمة","قسنطينة","المدية","مستغانم","المسيلة","معسكر","ورقلة","وهران","البيض","إليزي","برج بوعريريج","بومرداس","الطارف","تندوف","تيسمسيلت","الوادي","خنشلة","سوق أهراس","تيبازة","ميلة","عين الدفلى","النعامة","عين تموشنت","غرداية","غليزان","تيميمون","برج باجي مختار","أولاد جلال","بني عباس","عين صالح","عين قزام","تقرت","جانت","المغير","المنيعة"]
 
@@ -89,3 +89,4 @@ async def upload(file: UploadFile = File(...)):
     if file.content_type not in ["image/jpeg","image/png","image/webp"]: raise HTTPException(400,"صيغة الصورة غير مدعومة")
     folder=Path("uploads"); folder.mkdir(exist_ok=True); target=folder / file.filename
     target.write_bytes(await file.read()); return {"url":f"/uploads/{file.filename}"}
+
