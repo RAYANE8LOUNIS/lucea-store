@@ -29,10 +29,10 @@ class ProductDB(Base):
 class OrderDB(Base):
     __tablename__="orders"
     id:Mapped[int]=mapped_column(primary_key=True); order_number:Mapped[str]=mapped_column(String(40),unique=True)
-    product_id:Mapped[int]; product_name:Mapped[str]=mapped_column(String(180)); unit_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); customer_name:Mapped[str]=mapped_column(String(100)); phone:Mapped[str]=mapped_column(String(20)); wilaya:Mapped[str]=mapped_column(String(80)); commune:Mapped[str]=mapped_column(String(100)); address:Mapped[str]=mapped_column(Text); quantity:Mapped[int]; total_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); delivery_method:Mapped[Optional[str]]=mapped_column(String(20),nullable=True); delivery_price:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True); selected_color:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); selected_size:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); status:Mapped[str]=mapped_column(String(30),default="جديد"); created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow); updated_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
+    product_id:Mapped[int]; product_name:Mapped[str]=mapped_column(String(180)); unit_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); customer_name:Mapped[str]=mapped_column(String(100)); phone:Mapped[str]=mapped_column(String(20)); wilaya:Mapped[str]=mapped_column(String(80)); commune:Mapped[str]=mapped_column(String(100)); address:Mapped[str]=mapped_column(Text); quantity:Mapped[int]; total_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); delivery_method:Mapped[Optional[str]]=mapped_column(String(20),nullable=True); delivery_price:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True); selected_color:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); selected_size:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); status:Mapped[str]=mapped_column(String(30),default="جديد"); archived_at:Mapped[Optional[datetime]]=mapped_column(DateTime,nullable=True); created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow); updated_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
 Base.metadata.create_all(engine)
 def ensure_columns():
- additions={"products":{"images_json":"TEXT DEFAULT '[]' NOT NULL","colors_json":"TEXT DEFAULT '[]' NOT NULL","sizes_json":"TEXT DEFAULT '[]' NOT NULL","delivery_desk":"NUMERIC(12,2)","delivery_home":"NUMERIC(12,2)"},"orders":{"selected_color":"VARCHAR(80)","selected_size":"VARCHAR(80)","delivery_method":"VARCHAR(20)","delivery_price":"NUMERIC(12,2)"}}
+ additions={"products":{"images_json":"TEXT DEFAULT '[]' NOT NULL","colors_json":"TEXT DEFAULT '[]' NOT NULL","sizes_json":"TEXT DEFAULT '[]' NOT NULL","delivery_desk":"NUMERIC(12,2)","delivery_home":"NUMERIC(12,2)"},"orders":{"selected_color":"VARCHAR(80)","selected_size":"VARCHAR(80)","delivery_method":"VARCHAR(20)","delivery_price":"NUMERIC(12,2)","archived_at":"TIMESTAMP"}}
  with engine.begin() as connection:
   for table_name,columns in additions.items():
    existing={c["name"] for c in inspect(engine).get_columns(table_name)}
@@ -85,7 +85,7 @@ def product_out(p):
  desk=p.delivery_desk if p.delivery_desk is not None else p.delivery
  home=p.delivery_home if p.delivery_home is not None else p.delivery
  return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(home),"delivery_desk":float(desk),"delivery_home":float(home),"image":images[0] if images else p.image,"images":images,"colors":normalize_colors(json_list(p.colors_json)),"sizes":normalize_sizes(json_list(p.sizes_json)),"active":p.active}
-def order_out(o): return {"id":o.id,"order_number":o.order_number,"product_id":o.product_id,"product_name":o.product_name,"unit_price":float(o.unit_price),"customer_name":o.customer_name,"phone":o.phone,"wilaya":o.wilaya,"commune":o.commune,"address":o.address,"quantity":o.quantity,"delivery_method":o.delivery_method or "home","delivery_price":float(o.delivery_price or 0),"total_price":float(o.total_price),"selected_color":o.selected_color,"selected_size":o.selected_size,"status":o.status,"created_at":o.created_at.isoformat()}
+def order_out(o): return {"id":o.id,"order_number":o.order_number,"product_id":o.product_id,"product_name":o.product_name,"unit_price":float(o.unit_price),"customer_name":o.customer_name,"phone":o.phone,"wilaya":o.wilaya,"commune":o.commune,"address":o.address,"quantity":o.quantity,"delivery_method":o.delivery_method or "home","delivery_price":float(o.delivery_price or 0),"total_price":float(o.total_price),"selected_color":o.selected_color,"selected_size":o.selected_size,"status":o.status,"archived_at":o.archived_at.isoformat() if o.archived_at else None,"created_at":o.created_at.isoformat()}
 def product_data(p):
  data=p.model_dump(exclude={"id","images","colors","sizes"});images=[x for x in p.images if x]
  data["delivery_desk"]=p.delivery_desk if p.delivery_desk is not None else p.delivery
@@ -146,6 +146,20 @@ def create_order(o:OrderIn):
 @app.get("/api/orders")
 def get_orders(_=Depends(require_admin)):
  with Session(engine) as s:return [order_out(o) for o in s.scalars(select(OrderDB).order_by(OrderDB.created_at.desc())).all()]
+@app.post("/api/orders/archive-finished")
+def archive_finished_orders(_=Depends(require_admin)):
+ with Session(engine) as s:
+  orders=s.scalars(select(OrderDB).where(OrderDB.archived_at.is_(None),OrderDB.status.in_(["تم التوصيل","ملغي"]))).all()
+  archived_at=datetime.utcnow()
+  for order in orders: order.archived_at=archived_at
+  s.commit();return {"ok":True,"count":len(orders)}
+@app.patch("/api/orders/{oid}/archive")
+def archive_order(oid:int,archived:bool=True,_=Depends(require_admin)):
+ with Session(engine) as s:
+  order=s.get(OrderDB,oid)
+  if not order: raise HTTPException(404,"الطلب غير موجود")
+  order.archived_at=datetime.utcnow() if archived else None
+  s.commit();s.refresh(order);return order_out(order)
 @app.patch("/api/orders/{oid}")
 def update_order(oid:int,status:str,_=Depends(require_admin)):
  if status not in ["جديد","مؤكد","قيد التحضير","تم الشحن","تم التوصيل","ملغي"]: raise HTTPException(422,"حالة غير صحيحة")
