@@ -1,0 +1,13 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: lucea
+      POSTGRES_USER: lucea
+      POSTGRES_PASSWORD: lucea
+    ports:
+      - "5432:5432"
+    volumes:
+      - lucea_db:/var/lib/postgresql/data
+volumes:
+  lucea_db:

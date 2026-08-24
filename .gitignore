@@ -1,0 +1,10 @@
+backend/orders.json
+backend/uploads/
+backend/.venv/
+frontend/node_modules/
+frontend/.next/
+.pnpm-store/
+.env
+.env.local
+__pycache__/
+*.pyc
