@@ -66,6 +66,8 @@ def login(data:LoginIn,response:Response):
  return {"ok":True}
 @app.post("/api/auth/logout")
 def logout(response:Response): response.delete_cookie("lucea_session"); return {"ok":True}
+@app.get("/api/auth/me")
+def current_admin(_=Depends(require_admin)): return {"ok":True,"email":ADMIN_EMAIL}
 @app.get("/api/products")
 def products():
  with Session(engine) as s: return [product_out(p) for p in s.scalars(select(ProductDB).where(ProductDB.active==True)).all()]
