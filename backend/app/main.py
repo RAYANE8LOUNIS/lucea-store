@@ -1,5 +1,7 @@
 import os
-import hashlib, hmac, secrets, jwt
+import hashlib, hmac, secrets, jwt, io
+import cloudinary
+import cloudinary.uploader
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -15,6 +17,7 @@ if DATABASE_URL:
  if DATABASE_URL.startswith("postgres://"): DATABASE_URL=DATABASE_URL.replace("postgres://","postgresql+psycopg://",1)
  elif DATABASE_URL.startswith("postgresql://"): DATABASE_URL=DATABASE_URL.replace("postgresql://","postgresql+psycopg://",1)
 engine=create_engine(DATABASE_URL or "sqlite:///./lucea.db", pool_pre_ping=True)
+cloudinary.config(cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),api_key=os.getenv("CLOUDINARY_API_KEY"),api_secret=os.getenv("CLOUDINARY_API_SECRET"),secure=True)
 class Base(DeclarativeBase): pass
 class ProductDB(Base):
     __tablename__="products"
@@ -108,6 +111,13 @@ def update_order(oid:int,status:str,_=Depends(require_admin)):
   if not o: raise HTTPException(404,"الطلب غير موجود")
   o.status=status;s.commit();return order_out(o)
 @app.post("/api/uploads")
-async def upload(file:UploadFile=File(...)):
+async def upload(file:UploadFile=File(...),_=Depends(require_admin)):
  if file.content_type not in ["image/jpeg","image/png","image/webp"]: raise HTTPException(400,"صيغة الصورة غير مدعومة")
- folder=Path("uploads");folder.mkdir(exist_ok=True);target=folder/file.filename;target.write_bytes(await file.read());return {"url":f"/uploads/{file.filename}"}
+ content=await file.read()
+ if len(content)>5*1024*1024: raise HTTPException(400,"حجم الصورة يجب ألا يتجاوز 5 ميغابايت")
+ if not all([os.getenv("CLOUDINARY_CLOUD_NAME"),os.getenv("CLOUDINARY_API_KEY"),os.getenv("CLOUDINARY_API_SECRET")]): raise HTTPException(503,"خدمة رفع الصور غير مهيأة")
+ try:
+  stream=io.BytesIO(content);stream.name=file.filename or "product-image"
+  result=cloudinary.uploader.upload(stream,folder="lucea/products",resource_type="image",allowed_formats=["jpg","jpeg","png","webp"],transformation=[{"width":1400,"height":1400,"crop":"limit","quality":"auto","fetch_format":"auto"}])
+  return {"url":result["secure_url"],"public_id":result["public_id"]}
+ except Exception: raise HTTPException(502,"تعذر رفع الصورة، حاولي مرة أخرى")
