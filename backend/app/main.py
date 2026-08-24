@@ -82,6 +82,12 @@ def update_product(pid:int,p:ProductIn,_=Depends(require_admin)):
   if not db: raise HTTPException(404,"المنتج غير موجود")
   for k,v in p.model_dump().items(): setattr(db,k,v)
   s.commit();s.refresh(db);return product_out(db)
+@app.delete("/api/products/{pid}")
+def delete_product(pid:int,_=Depends(require_admin)):
+ with Session(engine) as s:
+  db=s.get(ProductDB,pid)
+  if not db: raise HTTPException(404,"المنتج غير موجود")
+  s.delete(db);s.commit();return {"ok":True}
 @app.post("/api/orders",status_code=201)
 def create_order(o:OrderIn):
  with Session(engine) as s:
