@@ -1,9 +1,10 @@
 import os
+import hashlib, hmac, secrets, jwt
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import Boolean, DateTime, Numeric, String, Text, create_engine, select
@@ -37,19 +38,41 @@ class OrderIn(BaseModel):
   d=v.replace(" ","").replace("-","")
   if len(d)!=10 or d[:2] not in ["05","06","07"]: raise ValueError("رقم الهاتف غير صحيح")
   return d
+class LoginIn(BaseModel): email:str; password:str
+SECRET_KEY=os.getenv("SECRET_KEY")
+ADMIN_EMAIL=os.getenv("ADMIN_EMAIL")
+ADMIN_PASSWORD=os.getenv("ADMIN_PASSWORD")
+if not SECRET_KEY or not ADMIN_EMAIL or not ADMIN_PASSWORD: raise RuntimeError("SECRET_KEY, ADMIN_EMAIL and ADMIN_PASSWORD must be configured")
+def password_hash(value): return hashlib.pbkdf2_hmac("sha256",value.encode(),SECRET_KEY.encode(),180000).hex()
+ADMIN_PASSWORD_HASH=os.getenv("ADMIN_PASSWORD_HASH",password_hash(ADMIN_PASSWORD))
+def require_admin(request:Request):
+ token=request.cookies.get("lucea_session")
+ if not token: raise HTTPException(401,"تسجيل الدخول مطلوب")
+ try: jwt.decode(token,SECRET_KEY,algorithms=["HS256"])
+ except jwt.PyJWTError: raise HTTPException(401,"جلسة الدخول غير صالحة")
+ return True
 def product_out(p): return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(p.delivery),"image":p.image,"active":p.active}
 def order_out(o): return {"id":o.id,"order_number":o.order_number,"product_id":o.product_id,"product_name":o.product_name,"unit_price":float(o.unit_price),"customer_name":o.customer_name,"phone":o.phone,"wilaya":o.wilaya,"commune":o.commune,"address":o.address,"quantity":o.quantity,"total_price":float(o.total_price),"status":o.status,"created_at":o.created_at.isoformat()}
 @app.get("/api/wilayas")
 def wilayas(): return WILAYAS
+@app.post("/api/auth/login")
+def login(data:LoginIn,response:Response):
+ if not hmac.compare_digest(data.email,ADMIN_EMAIL) or not hmac.compare_digest(password_hash(data.password),ADMIN_PASSWORD_HASH): raise HTTPException(401,"بيانات الدخول غير صحيحة")
+ token=jwt.encode({"sub":ADMIN_EMAIL,"exp":datetime.utcnow().timestamp()+60*60*24*7},SECRET_KEY,algorithm="HS256")
+ production=os.getenv("ENVIRONMENT","development")=="production"
+ response.set_cookie("lucea_session",token,httponly=True,secure=production,samesite="none" if production else "lax",max_age=60*60*24*7)
+ return {"ok":True}
+@app.post("/api/auth/logout")
+def logout(response:Response): response.delete_cookie("lucea_session"); return {"ok":True}
 @app.get("/api/products")
 def products():
  with Session(engine) as s: return [product_out(p) for p in s.scalars(select(ProductDB).where(ProductDB.active==True)).all()]
 @app.post("/api/products")
-def create_product(p:ProductIn):
+def create_product(p:ProductIn,_=Depends(require_admin)):
  with Session(engine) as s:
   db=ProductDB(**p.model_dump());s.add(db);s.commit();s.refresh(db);return product_out(db)
 @app.put("/api/products/{pid}")
-def update_product(pid:int,p:ProductIn):
+def update_product(pid:int,p:ProductIn,_=Depends(require_admin)):
  with Session(engine) as s:
   db=s.get(ProductDB,pid)
   if not db: raise HTTPException(404,"المنتج غير موجود")
@@ -64,10 +87,10 @@ def create_order(o:OrderIn):
   db=OrderDB(order_number=f"LC-{datetime.now():%Y%m%d}-{(s.query(OrderDB).count()+1):03d}",**o.model_dump(),total_price=Decimal(str(o.unit_price))*o.quantity)
   s.add(db);s.commit();s.refresh(db);return order_out(db)
 @app.get("/api/orders")
-def get_orders():
+def get_orders(_=Depends(require_admin)):
  with Session(engine) as s:return [order_out(o) for o in s.scalars(select(OrderDB).order_by(OrderDB.created_at.desc())).all()]
 @app.patch("/api/orders/{oid}")
-def update_order(oid:int,status:str):
+def update_order(oid:int,status:str,_=Depends(require_admin)):
  if status not in ["جديد","مؤكد","قيد التحضير","تم الشحن","تم التوصيل","ملغي"]: raise HTTPException(422,"حالة غير صحيحة")
  with Session(engine) as s:
   o=s.get(OrderDB,oid)
