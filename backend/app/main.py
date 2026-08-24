@@ -74,7 +74,8 @@ def products():
 @app.post("/api/products")
 def create_product(p:ProductIn,_=Depends(require_admin)):
  with Session(engine) as s:
-  db=ProductDB(**p.model_dump());s.add(db);s.commit();s.refresh(db);return product_out(db)
+  data=p.model_dump();data.pop("id",None)
+  db=ProductDB(**data);s.add(db);s.commit();s.refresh(db);return product_out(db)
 @app.put("/api/products/{pid}")
 def update_product(pid:int,p:ProductIn,_=Depends(require_admin)):
  with Session(engine) as s:
