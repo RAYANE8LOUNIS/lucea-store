@@ -73,13 +73,18 @@ def normalize_sizes(values):
  for value in values:
   result.extend(part.strip().upper() for part in re.split(r"[،,./\s]+",value) if part.strip())
  return list(dict.fromkeys(result))
+def normalize_colors(values):
+ result=[]
+ for value in values:
+  result.extend(part.strip() for part in re.split(r"[،,./;\n]+",value) if part.strip())
+ return list(dict.fromkeys(result))
 def product_out(p):
  images=json_list(p.images_json) or ([p.image] if p.image else [])
- return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(p.delivery),"image":images[0] if images else p.image,"images":images,"colors":json_list(p.colors_json),"sizes":normalize_sizes(json_list(p.sizes_json)),"active":p.active}
+ return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(p.delivery),"image":images[0] if images else p.image,"images":images,"colors":normalize_colors(json_list(p.colors_json)),"sizes":normalize_sizes(json_list(p.sizes_json)),"active":p.active}
 def order_out(o): return {"id":o.id,"order_number":o.order_number,"product_id":o.product_id,"product_name":o.product_name,"unit_price":float(o.unit_price),"customer_name":o.customer_name,"phone":o.phone,"wilaya":o.wilaya,"commune":o.commune,"address":o.address,"quantity":o.quantity,"total_price":float(o.total_price),"selected_color":o.selected_color,"selected_size":o.selected_size,"status":o.status,"created_at":o.created_at.isoformat()}
 def product_data(p):
  data=p.model_dump(exclude={"id","images","colors","sizes"});images=[x for x in p.images if x]
- data["image"]=images[0] if images else p.image;data["images_json"]=json.dumps(images,ensure_ascii=False);data["colors_json"]=json.dumps([x.strip() for x in p.colors if x.strip()],ensure_ascii=False);data["sizes_json"]=json.dumps(normalize_sizes(p.sizes),ensure_ascii=False)
+ data["image"]=images[0] if images else p.image;data["images_json"]=json.dumps(images,ensure_ascii=False);data["colors_json"]=json.dumps(normalize_colors(p.colors),ensure_ascii=False);data["sizes_json"]=json.dumps(normalize_sizes(p.sizes),ensure_ascii=False)
  return data
 @app.get("/api/wilayas")
 def wilayas(): return WILAYAS
@@ -121,7 +126,7 @@ def create_order(o:OrderIn):
   p=s.get(ProductDB,o.product_id)
   if not p or not p.active: raise HTTPException(404,"المنتج غير متوفر")
   if o.wilaya not in WILAYAS: raise HTTPException(422,"الولاية غير صحيحة")
-  colors=json_list(p.colors_json);sizes=normalize_sizes(json_list(p.sizes_json))
+  colors=normalize_colors(json_list(p.colors_json));sizes=normalize_sizes(json_list(p.sizes_json))
   if colors and o.selected_color not in colors: raise HTTPException(422,"يرجى اختيار اللون")
   if sizes and o.selected_size not in sizes: raise HTTPException(422,"يرجى اختيار المقاس")
   db=OrderDB(order_number=f"LC-{datetime.now():%Y%m%d}-{(s.query(OrderDB).count()+1):03d}",**o.model_dump(),total_price=Decimal(str(o.unit_price))*o.quantity)
