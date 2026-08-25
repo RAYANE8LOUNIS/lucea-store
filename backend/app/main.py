@@ -25,14 +25,14 @@ class ProductDB(Base):
     name:Mapped[str]=mapped_column(String(180)); description:Mapped[str]=mapped_column(Text)
     price:Mapped[Decimal]=mapped_column(Numeric(12,2)); old_price:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True)
     delivery:Mapped[Decimal]=mapped_column(Numeric(12,2),default=500); delivery_desk:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True); delivery_home:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True); image:Mapped[str]=mapped_column(String(500),default="/logo.jpg"); active:Mapped[bool]=mapped_column(Boolean,default=True)
-    images_json:Mapped[str]=mapped_column(Text,default="[]"); colors_json:Mapped[str]=mapped_column(Text,default="[]"); sizes_json:Mapped[str]=mapped_column(Text,default="[]")
+    images_json:Mapped[str]=mapped_column(Text,default="[]"); colors_json:Mapped[str]=mapped_column(Text,default="[]"); sizes_json:Mapped[str]=mapped_column(Text,default="[]"); marketing_badge:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); urgency_text:Mapped[Optional[str]]=mapped_column(String(180),nullable=True)
 class OrderDB(Base):
     __tablename__="orders"
     id:Mapped[int]=mapped_column(primary_key=True); order_number:Mapped[str]=mapped_column(String(40),unique=True)
     product_id:Mapped[int]; product_name:Mapped[str]=mapped_column(String(180)); unit_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); customer_name:Mapped[str]=mapped_column(String(100)); phone:Mapped[str]=mapped_column(String(20)); wilaya:Mapped[str]=mapped_column(String(80)); commune:Mapped[str]=mapped_column(String(100)); address:Mapped[str]=mapped_column(Text); quantity:Mapped[int]; total_price:Mapped[Decimal]=mapped_column(Numeric(12,2)); delivery_method:Mapped[Optional[str]]=mapped_column(String(20),nullable=True); delivery_price:Mapped[Optional[Decimal]]=mapped_column(Numeric(12,2),nullable=True); selected_color:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); selected_size:Mapped[Optional[str]]=mapped_column(String(80),nullable=True); status:Mapped[str]=mapped_column(String(30),default="جديد"); archived_at:Mapped[Optional[datetime]]=mapped_column(DateTime,nullable=True); created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow); updated_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow,onupdate=datetime.utcnow)
 Base.metadata.create_all(engine)
 def ensure_columns():
- additions={"products":{"images_json":"TEXT DEFAULT '[]' NOT NULL","colors_json":"TEXT DEFAULT '[]' NOT NULL","sizes_json":"TEXT DEFAULT '[]' NOT NULL","delivery_desk":"NUMERIC(12,2)","delivery_home":"NUMERIC(12,2)"},"orders":{"selected_color":"VARCHAR(80)","selected_size":"VARCHAR(80)","delivery_method":"VARCHAR(20)","delivery_price":"NUMERIC(12,2)","archived_at":"TIMESTAMP"}}
+ additions={"products":{"images_json":"TEXT DEFAULT '[]' NOT NULL","colors_json":"TEXT DEFAULT '[]' NOT NULL","sizes_json":"TEXT DEFAULT '[]' NOT NULL","delivery_desk":"NUMERIC(12,2)","delivery_home":"NUMERIC(12,2)","marketing_badge":"VARCHAR(80)","urgency_text":"VARCHAR(180)"},"orders":{"selected_color":"VARCHAR(80)","selected_size":"VARCHAR(80)","delivery_method":"VARCHAR(20)","delivery_price":"NUMERIC(12,2)","archived_at":"TIMESTAMP"}}
  with engine.begin() as connection:
   for table_name,columns in additions.items():
    existing={c["name"] for c in inspect(engine).get_columns(table_name)}
@@ -45,7 +45,7 @@ ensure_columns()
 app=FastAPI(title="Lucea API")
 app.add_middleware(CORSMiddleware,allow_origins=["http://localhost:3000","https://lucea-store-bice.vercel.app","https://lucea-store-qbuunapyt-rayane6.vercel.app"],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 WILAYAS=["أدرار","الشلف","الأغواط","أم البواقي","باتنة","بجاية","بسكرة","بشار","البليدة","البويرة","تمنراست","تبسة","تلمسان","تيارت","تيزي وزو","الجزائر","الجلفة","جيجل","سطيف","سعيدة","سكيكدة","سيدي بلعباس","عنابة","قالمة","قسنطينة","المدية","مستغانم","المسيلة","معسكر","ورقلة","وهران","البيض","إليزي","برج بوعريريج","بومرداس","الطارف","تندوف","تيسمسيلت","الوادي","خنشلة","سوق أهراس","تيبازة","ميلة","عين الدفلى","النعامة","عين تموشنت","غرداية","غليزان","تيميمون","برج باجي مختار","أولاد جلال","بني عباس","عين صالح","عين قزام","تقرت","جانت","المغير","المنيعة"]
-class ProductIn(BaseModel): id:Optional[int]=None; name:str; description:str; price:float=Field(ge=0); old_price:Optional[float]=Field(default=None,ge=0); delivery:float=Field(default=500,ge=0); delivery_desk:Optional[float]=Field(default=None,ge=0); delivery_home:Optional[float]=Field(default=None,ge=0); image:str="/logo.jpg"; images:list[str]=Field(default_factory=list); colors:list[str]=Field(default_factory=list); sizes:list[str]=Field(default_factory=list); active:bool=True
+class ProductIn(BaseModel): id:Optional[int]=None; name:str; description:str; price:float=Field(ge=0); old_price:Optional[float]=Field(default=None,ge=0); delivery:float=Field(default=500,ge=0); delivery_desk:Optional[float]=Field(default=None,ge=0); delivery_home:Optional[float]=Field(default=None,ge=0); image:str="/logo.jpg"; images:list[str]=Field(default_factory=list); colors:list[str]=Field(default_factory=list); sizes:list[str]=Field(default_factory=list); marketing_badge:Optional[str]=Field(default=None,max_length=80); urgency_text:Optional[str]=Field(default=None,max_length=180); active:bool=True
 class OrderIn(BaseModel):
  product_id:int; product_name:Optional[str]=None; unit_price:Optional[float]=None; customer_name:str=Field(min_length=3); phone:str; wilaya:str; commune:str=Field(min_length=2); address:str=""; quantity:int=Field(ge=1,le=20); delivery_method:str="home"; selected_color:Optional[str]=None; selected_size:Optional[str]=None
  @field_validator("phone")
@@ -84,13 +84,15 @@ def product_out(p):
  images=json_list(p.images_json) or ([p.image] if p.image else [])
  desk=p.delivery_desk if p.delivery_desk is not None else p.delivery
  home=p.delivery_home if p.delivery_home is not None else p.delivery
- return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(home),"delivery_desk":float(desk),"delivery_home":float(home),"image":images[0] if images else p.image,"images":images,"colors":normalize_colors(json_list(p.colors_json)),"sizes":normalize_sizes(json_list(p.sizes_json)),"active":p.active}
+ return {"id":p.id,"name":p.name,"description":p.description,"price":float(p.price),"old_price":float(p.old_price) if p.old_price is not None else None,"delivery":float(home),"delivery_desk":float(desk),"delivery_home":float(home),"image":images[0] if images else p.image,"images":images,"colors":normalize_colors(json_list(p.colors_json)),"sizes":normalize_sizes(json_list(p.sizes_json)),"marketing_badge":p.marketing_badge,"urgency_text":p.urgency_text,"active":p.active}
 def order_out(o): return {"id":o.id,"order_number":o.order_number,"product_id":o.product_id,"product_name":o.product_name,"unit_price":float(o.unit_price),"customer_name":o.customer_name,"phone":o.phone,"wilaya":o.wilaya,"commune":o.commune,"address":o.address,"quantity":o.quantity,"delivery_method":o.delivery_method or "home","delivery_price":float(o.delivery_price or 0),"total_price":float(o.total_price),"selected_color":o.selected_color,"selected_size":o.selected_size,"status":o.status,"archived_at":o.archived_at.isoformat() if o.archived_at else None,"created_at":o.created_at.isoformat(),"updated_at":o.updated_at.isoformat() if o.updated_at else None}
 def product_data(p):
  data=p.model_dump(exclude={"id","images","colors","sizes"});images=[x for x in p.images if x]
  data["delivery_desk"]=p.delivery_desk if p.delivery_desk is not None else p.delivery
  data["delivery_home"]=p.delivery_home if p.delivery_home is not None else p.delivery
  data["delivery"]=data["delivery_home"]
+ data["marketing_badge"]=(p.marketing_badge or "").strip() or None
+ data["urgency_text"]=(p.urgency_text or "").strip() or None
  data["image"]=images[0] if images else p.image;data["images_json"]=json.dumps(images,ensure_ascii=False);data["colors_json"]=json.dumps(normalize_colors(p.colors),ensure_ascii=False);data["sizes_json"]=json.dumps(normalize_sizes(p.sizes),ensure_ascii=False)
  return data
 @app.get("/api/wilayas")
